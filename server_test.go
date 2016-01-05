@@ -26,11 +26,20 @@ func (handler *Handler) Handle(conn *net.TCPConn, err error) {
 
 	if err != nil {
 		handler.Errors = append(handler.Errors, err)
+		return
+	}
+
+	// read squanchy
+	_, err = conn.Read(nil)
+	if err != nil && err != io.EOF {
+		handler.Errors = append(handler.Errors, err)
+		return
 	}
 
 	_, err = conn.Write([]byte("response"))
 	if err != nil {
 		handler.Errors = append(handler.Errors, err)
+
 	}
 }
 
@@ -46,7 +55,6 @@ func TestListen(t *testing.T) {
 
 	go func() {
 		server.Serve(func(conn *net.TCPConn, err error) {
-			workers.Add(1)
 			defer workers.Done()
 
 			handler.Handle(conn, err)
@@ -55,12 +63,17 @@ func TestListen(t *testing.T) {
 
 	dials := rand.Intn(50)
 	for i := 1; i <= dials; i++ {
-		dial(t, "localhost:12345", fmt.Sprintf("squancy-%d", i))
+		workers.Add(1)
+		dial(t, "localhost:12345", fmt.Sprintf("squanchy-%d", i))
 	}
 
 	workers.Wait()
 
 	assert.Equal(t, dials, handler.Handled, "mismatch handled count")
+
+	for _, err := range handler.Errors {
+		t.Error(err)
+	}
 }
 
 func dial(t *testing.T, address string, data ...string) {
